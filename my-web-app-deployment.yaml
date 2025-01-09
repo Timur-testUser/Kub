@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app-deployment
+  labels:
+    app: app
+spec:
+  replicas: 4  # сколько подов нужно держать поднятыми
+  selector:
+    matchLabels:
+      app: app
+  template:
+    metadata:
+      labels:
+        app: app
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - app
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: app
+        image: <your-image>:<tag>
+        resources:
+          requests:
+            cpu: "0.2" # Запрашиваем 0.2 CPU для инициализации и работы
+            memory: "128Mi" # Запрашиваем 128M memory
+          limits:
+            cpu: "0.5" # Ограничиваем потребление CPU до 0.5 для экономии ресурсов
+            memory: "256Mi" # Ограничиваем потребление memory до 256M для экономии ресурсов
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15 # Увеличиваем задержку до 15 секунд, чтобы дать приложению время на инициализацию
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          periodSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10 # Увеличиваем задержку до 10 секунд, чтобы дать приложению время на инициализацию
+          periodSeconds: 5
+          failureThreshold: 30 # Увеличиваем порог неудач до 30, чтобы дать приложению достаточно времени на инициализацию
+---
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: app-deployment
+  minReplicas: 4 # Минимальное количество реплик
+  maxReplicas: 10 # Максимальное количество реплик 
+  targetCPUUtilizationPercentage: 50 # Автомасштабирование основано на среднем значении потребления CPU
